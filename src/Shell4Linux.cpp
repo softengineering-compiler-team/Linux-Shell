@@ -6,6 +6,8 @@
 #include<pwd.h>
 #include<sys/types.h>
 #include<sys/wait.h>
+#include <readline/readline.h>
+#include <readline/history.h>
 
 #define RL_BUFSIZE 1024
 #define TOK_BUFSIZE 64
@@ -50,11 +52,17 @@ int exit(char **args);
 int callCommandWithPipe(int left, int right);
 int callCommandWithRedi(int left, int right);
 int isCommandExist(const char* command);
+void set_prompt(char *prompt);//显示主机名
+void history_setup();
+void history_finish();
+int display_history_list(char **args);
+
 
 char *builtin_str[] = {
   "cd",
   "help",
-  "exit"
+  "exit",
+  "history"
 };
 
 int num_builtins() {
@@ -64,8 +72,55 @@ int num_builtins() {
 int (*builtin_func[]) (char **) = {
   &cd,
   &help,
-  &exit
+  &exit,
+  &display_history_list
 };
+
+//set the prompt
+void set_prompt(char *prompt){
+	char hostname[100];
+	char cwd[100];
+	char super = '#';
+	//to cut the cwd by "/"	
+	char delims[] = "/";	
+	struct passwd* pwp;
+	
+	if(gethostname(hostname,sizeof(hostname)) == -1){
+		//get hostname failed
+		strcpy(hostname,"unknown");
+	}//if
+	//getuid() get user id ,then getpwuid get the user information by user id 
+	pwp = getpwuid(getuid());	
+	if(!(getcwd(cwd,sizeof(cwd)))){
+		//get cwd failed
+		strcpy(cwd,"unknown");	
+	}//if
+	char cwdcopy[100];
+	strcpy(cwdcopy,cwd);
+	char *first = strtok(cwdcopy,delims);
+	char *second = strtok(NULL,delims);
+	//if at home 
+	if(!(strcmp(first,"home")) && !(strcmp(second,pwp->pw_name))){
+		int offset = strlen(first) + strlen(second)+2;
+		char newcwd[100];
+		char *p = cwd;
+		char *q = newcwd;
+
+		p += offset;
+		while(*(q++) = *(p++));
+		char tmp[100];
+		strcpy(tmp,"~");
+		strcat(tmp,newcwd);
+		strcpy(cwd,tmp);			
+	}	
+	
+	if(getuid() == 0)//if super
+		super = '#';
+	else
+		super = '$';
+	sprintf(prompt, "\e[1;32m%s@%s\e[0m:\e[1;31m%s\e[0m%c",pwp->pw_name,hostname,cwd,super);	
+	printf("%s",prompt);
+}
 
 int help(char **args) {
   	int i;
@@ -246,7 +301,7 @@ int execute(char **args,int commandNum) {
   	if (args[0] == NULL) {
     	return 1;
   	}
-
+	add_history(args[0]);//history added
   	for(i = 0; i < num_builtins(); i++) {
     	if (strcmp(args[0], builtin_str[i]) == 0) {
       		return (*builtin_func[i])(args);
@@ -258,10 +313,12 @@ int execute(char **args,int commandNum) {
 
 void loop() {
 	char *line;
-
+	char prompt[100];//数组不要开太小 会溢出
   	int status;
+	history_setup();
   	do {
-    	printf("bug>: ");
+		set_prompt(prompt);
+    	//printf("bug>: ");
     	line = read_line();
 		int tmp=0;
 		int &commandNum=tmp;
@@ -270,6 +327,7 @@ void loop() {
     	free(line);
     	free(args);
   	} while (status);
+	history_finish();
 }
 
 int callCommand(int commandNum) { // 给用户使用的函数，用以执行用户输入的命令
@@ -428,6 +486,29 @@ int callCommandWithRedi(int left, int right) { // 所要执行的指令区间[le
 	return result;
 }
 
+
+void history_setup(){
+	using_history();
+	stifle_history(50);
+	read_history("/tmp/msh_history");	
+}
+
+void history_finish(){
+	append_history(history_length, "/tmp/msh_history");
+	history_truncate_file("/tmp/msh_history", history_max_entries);
+}
+
+int display_history_list(char ** args){
+	HIST_ENTRY** h = history_list();
+	if(h) {
+		int i = 0;
+		while(h[i]) {
+			printf("%d: %s\n", i, h[i]->line);
+			i++;
+		}
+	}
+	return 1;
+}
 
 int main() {
 	loop();
