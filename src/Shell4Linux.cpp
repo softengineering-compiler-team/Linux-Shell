@@ -6,13 +6,17 @@
 #include<pwd.h>
 #include<sys/types.h>
 #include<sys/wait.h>
-#include <readline/readline.h>
-#include <readline/history.h>
+#include<readline/readline.h>
+#include<readline/history.h>
+#include<termios.h>
+#include<dirent.h>
+
+#define MOVELEFT(y) printf("\033[%dD", (y))
 
 #define RL_BUFSIZE 1024
 #define TOK_BUFSIZE 64
 #define TOK_DELIM " \t\r\n\a"
-
+#define FILE_MAX 250
 #define BUF_SZ 256
 #define TRUE 1
 #define FALSE 0
@@ -23,6 +27,7 @@ const char* COMMAND_CD = "cd";
 const char* COMMAND_IN = "<";
 const char* COMMAND_OUT = ">";
 const char* COMMAND_PIPE = "|";
+const char* COMMAND_MYLS = "myls";
 char **args;
 
 enum {
@@ -49,6 +54,7 @@ enum {
 int cd(char **args);
 int help(char **args);
 int exit(char **args);
+int myls(char **args);
 int callCommandWithPipe(int left, int right);
 int callCommandWithRedi(int left, int right);
 int isCommandExist(const char* command);
@@ -59,10 +65,11 @@ int display_history_list(char **args);
 
 
 char *builtin_str[] = {
-  "cd",
-  "help",
-  "exit",
-  "history"
+	(char *)"cd",
+	(char *)"help",
+  	(char *)"exit",
+  	(char *)"history",
+	(char *)"myls"
 };
 
 int num_builtins() {
@@ -70,10 +77,11 @@ int num_builtins() {
 }
 
 int (*builtin_func[]) (char **) = {
-  &cd,
-  &help,
-  &exit,
-  &display_history_list
+  	&cd,
+  	&help,
+  	&exit,
+  	&display_history_list,
+	&myls
 };
 
 //set the prompt
@@ -137,7 +145,7 @@ int help(char **args) {
 
 int cd(char **args) {
   if(args[1] == NULL) {
-    fprintf(stderr, "Expected argument to \"cd\" not found\n!");
+    fprintf(stderr, "Expected argument to \"cd\" not found!\n");
   } else {
     if (chdir(args[1]) != 0) {
       perror("Linux-Shell:");
@@ -151,66 +159,235 @@ int exit(char **args) {
   return 0;
 }
 
+char **readFileList(char *basePath) {
+	int position = 0;
+  	char **filename_pointer = (char **)malloc(FILE_MAX * sizeof(char*));
+  	char *filename;
+
+  	if (!filename) {
+   	 	fprintf(stderr, "Allocation Error!\n");
+    		exit(EXIT_FAILURE);
+  	}
+	
+
+
+	DIR * dir;
+	struct dirent *ptr;
+	if((dir = opendir(basePath)) == NULL) {
+		perror("Open Dir Error!\n");
+		exit(1);
+	}
+	while((ptr = readdir(dir)) != NULL) {
+		if(strcmp(ptr->d_name, ".") == 0||strcmp(ptr->d_name, "..") == 0) {
+			continue;
+		} else {
+			filename = ptr->d_name;
+			filename_pointer[position] = filename;	
+			position++;
+		}
+	}
+	filename_pointer[position] = NULL;
+	closedir(dir);
+	return filename_pointer;
+}
+
+int fileNum(char **filename_pointer) {
+	int num = 0;
+	while(*filename_pointer != NULL) {
+		filename_pointer++;
+		num++;
+	}
+	return num;
+}
+
+int myls(char **args) {
+	DIR *dir;
+	char basePath[250];
+	memset(basePath, '\0', sizeof(basePath));
+	getcwd(basePath, 249);
+	char **filename_pointer = readFileList(basePath);
+	printf("File Num:%d|\n", fileNum(filename_pointer));
+	printf("----------\n");
+	while(*filename_pointer != NULL) {
+		printf("%s\n", *(filename_pointer));
+		filename_pointer++;
+	}
+	return 1;
+}
+
+char getonechar(void) {
+	struct termios stored_settings;
+    	struct termios new_settings;
+    	tcgetattr (0, &stored_settings);
+    	new_settings = stored_settings;
+    	new_settings.c_lflag &= ~(ICANON|ECHO);
+    	new_settings.c_cc[VTIME] = 0;
+    	new_settings.c_cc[VMIN] = 1;
+	tcsetattr (0, TCSANOW, &new_settings);
+
+    	int ret = 0;
+    	char c;
+ 
+
+
+    	c = getchar();
+
+    	tcsetattr (0, TCSANOW, &stored_settings); 
+
+ 
+    	return c; 
+}
+
+
 char * read_line() {
 	int bufsize = RL_BUFSIZE;
 	char *buffer = (char *)malloc(sizeof(char) * bufsize);
+
+	char *tempBuffer = (char *)malloc(sizeof(char) * bufsize);;//为单条命令（被空格分割的命令）分配临时内存
+
 	int position = 0;
+	int tempPosition = 0;
 	int c;
 	if (!buffer) {
-    	fprintf(stderr, "Allocation Error!\n");
-    	exit(EXIT_FAILURE);
+    		fprintf(stderr, "Allocation Error!\n");
+    		exit(EXIT_FAILURE);
   	}
+	int notSpaceNum = 0;
+	int tabNum = 0;
 
-  	while(true) {
-  		c = getchar();
+  	tag: while(true) {
+  		c = getonechar();
   		if (c == EOF) {
-      		exit(EXIT_SUCCESS);
-    	} else if (c == '\n') {
-      		buffer[position] = '\0';
-      		return buffer;
-    	} else {
-      		buffer[position] = c;
-    	}
-    	position++;
+      			exit(EXIT_SUCCESS);
+    		} else if((int)c == 127) {
+			if(position <= 0) {
+				continue;
+			} else {
+				putchar('\b');
+				putchar(' ');
+				MOVELEFT(1);
+				position--;
+				tempPosition--;
+				notSpaceNum--;
+				tabNum = 0;
+			}
+				
+		} else if(c == '\n') {
+			putchar(c);
+      			buffer[position] = '\0';
+			tabNum = 0;
+      			return buffer;
+    		} else if(c == '\t') {
+			tabNum ++;
+			tabNum = tabNum % 2;
+			char basePath[250];
+			memset(basePath, '\0', sizeof(basePath));
+			getcwd(basePath, 249);
+			char **filename_pointer = readFileList(basePath);
+			if(tabNum == 1) {
+				for (int i = 0; i < fileNum(filename_pointer); i++) {
+					for(int j=0; j<tempPosition; j++) {
+						if(*(tempBuffer+j) != *(filename_pointer[i]+j)) {
+							break;			
+						}
+						if(j == tempPosition-1) {
+							position = position - notSpaceNum;
+							for(int k=0; k<notSpaceNum; k++) {
+								putchar('\b');
+								putchar(' ');
+								MOVELEFT(1);
+							}
+
+							int t = 0;
+							while(*(*(filename_pointer+i)+t) != '\0') {
+								buffer[position] = *(*(filename_pointer+i)+t);
+								t++;
+								position++;
+							}
+							
+							printf("%s", *(filename_pointer+i));
+							goto tag;
+										
+						}
+
+					} 
+					
+	  			}
+			} else {
+				printf("\n");
+				for (int i = 0; i < fileNum(filename_pointer); i++) {
+					for(int j=0; j<tempPosition; j++) {
+						if(*(tempBuffer+j) != *(filename_pointer[i]+j)) {
+							break;			
+						}
+						if(j == tempPosition-1) {
+							printf("%s\n", *(filename_pointer+i));				
+						}
+					} 
+					
+	  			}
+				tabNum = 0;
+				return NULL;
+			}
+
+
+		} else {
+			if((int)c == 32||c == '/') {
+				tempPosition = 0;
+				notSpaceNum = 0;
+			} else {
+				tempBuffer[tempPosition] = c;
+				tempPosition++;
+				notSpaceNum ++;		
+			}
+			putchar(c);
+      			buffer[position] = c;
+			
+			tabNum = 0;
+			position++;
+			
+			
+    		}
+ 
     	
-    	if (position >= bufsize) {
-      		bufsize += RL_BUFSIZE;
-      		buffer = (char *)realloc(buffer, bufsize);
-      		if (!buffer) {
-        		fprintf(stderr, "Allocation Error!\n");
-        		exit(EXIT_FAILURE);
-      		}
-    	}
+    		if (position >= bufsize) {
+      			bufsize += RL_BUFSIZE;
+      			buffer = (char *)realloc(buffer, bufsize);
+      			if (!buffer) {
+        			fprintf(stderr, "Allocation Error!\n");
+        			exit(EXIT_FAILURE);
+      			}
+    		}
   	}
 }
 
 char **split_line(char *line,int &commandNum) {
-  int bufsize = TOK_BUFSIZE, position = 0;
-  char **tokens = (char **)malloc(bufsize * sizeof(char*));
-  char *token, **tokens_backup;
+  	int bufsize = TOK_BUFSIZE, position = 0;
+  	char **tokens = (char **)malloc(bufsize * sizeof(char*));
+  	char *token, **tokens_backup;
 
-  if (!tokens) {
-    fprintf(stderr, "Allocation Error!\n");
-    exit(EXIT_FAILURE);
-  }
+  	if (!tokens) {
+   	 	fprintf(stderr, "Allocation Error!\n");
+    		exit(EXIT_FAILURE);
+  	}
 
-  token = strtok(line, TOK_DELIM);
-  while (token != NULL) {
-    tokens[position] = token;
-    position++;
+  	token = strtok(line, TOK_DELIM);
+  	while (token != NULL) {
+    	tokens[position] = token;
+   	 position++;
     
-    if (position >= bufsize) {
-      bufsize += TOK_BUFSIZE;
-      tokens_backup = tokens;
-      tokens = (char **)realloc(tokens, bufsize * sizeof(char*));
-      if (!tokens) {
-		free(tokens_backup);
-        fprintf(stderr, "Allocation Error\n!");
-        exit(EXIT_FAILURE);
-      }
-    }
+    	if (position >= bufsize) {
+      		bufsize += TOK_BUFSIZE;
+      		tokens_backup = tokens;
+      		tokens = (char **)realloc(tokens, bufsize * sizeof(char*));
+      		if (!tokens) {
+			free(tokens_backup);
+        		fprintf(stderr, "Allocation Error\n!");
+        		exit(EXIT_FAILURE);
+      		}
+    	}
 
-    token = strtok(NULL, TOK_DELIM);
+    	token = strtok(NULL, TOK_DELIM);
   }
   tokens[position] = NULL;
   commandNum=position;
@@ -318,14 +495,13 @@ void loop() {
 	history_setup();
   	do {
 		set_prompt(prompt);
-    	//printf("bug>: ");
-    	line = read_line();
+    		line = read_line();
 		int tmp=0;
 		int &commandNum=tmp;
-    	args = split_line(line,commandNum);
-    	status = execute(args,commandNum);
-    	free(line);
-    	free(args);
+    		args = split_line(line,commandNum);
+    		status = execute(args,commandNum);
+    		free(line);
+    		free(args);
   	} while (status);
 	history_finish();
 }
