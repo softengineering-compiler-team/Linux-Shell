@@ -6,10 +6,10 @@
 #include<pwd.h>
 #include<sys/types.h>
 #include<sys/wait.h>
-#include<readline/readline.h>
-#include<readline/history.h>
 #include<termios.h>
 #include<dirent.h>
+#include <readline/readline.h>
+#include <readline/history.h>
 
 #define MOVELEFT(y) printf("\033[%dD", (y))
 
@@ -58,18 +58,25 @@ int myls(char **args);
 int callCommandWithPipe(int left, int right);
 int callCommandWithRedi(int left, int right);
 int isCommandExist(const char* command);
+int myjobs(char **args);
 void set_prompt(char *prompt);//显示主机名
 void history_setup();
 void history_finish();
+void init();
+void loop();
+int mytime(char **args);
 int display_history_list(char **args);
-
+int background=0;
+int cmd_cnt;
 
 char *builtin_str[] = {
-	(char *)"cd",
-	(char *)"help",
-  	(char *)"exit",
-  	(char *)"history",
-	(char *)"myls"
+  (char *)"cd",
+  (char *)"help",
+  (char *)"exit",
+  (char *)"history",
+  (char *)"mytime",
+  (char *)"myjobs",
+  (char *)"myls"
 };
 
 int num_builtins() {
@@ -77,11 +84,13 @@ int num_builtins() {
 }
 
 int (*builtin_func[]) (char **) = {
-  	&cd,
-  	&help,
-  	&exit,
-  	&display_history_list,
-	&myls
+  &cd,
+  &help,
+  &exit,
+  &display_history_list,
+  &mytime,
+  &myjobs,
+  &myls
 };
 
 //set the prompt
@@ -156,6 +165,9 @@ int cd(char **args) {
 
 
 int exit(char **args) {
+  printf("Bye Bye ! \n");
+  char *argvlist[]={(char *)"/usr/local/bin/lolcat",(char *)"./tri/exit.txt", NULL};
+  execve(argvlist[0],argvlist,NULL);
   return 0;
 }
 
@@ -169,7 +181,6 @@ char **readFileList(char *basePath) {
     		exit(EXIT_FAILURE);
   	}
 	
-
 
 	DIR * dir;
 	struct dirent *ptr;
@@ -217,67 +228,124 @@ int myls(char **args) {
 
 char getonechar(void) {
 	struct termios stored_settings;
-    	struct termios new_settings;
-    	tcgetattr (0, &stored_settings);
-    	new_settings = stored_settings;
-    	new_settings.c_lflag &= ~(ICANON|ECHO);
-    	new_settings.c_cc[VTIME] = 0;
-    	new_settings.c_cc[VMIN] = 1;
+	struct termios new_settings;
+	tcgetattr (0, &stored_settings);
+	new_settings = stored_settings;
+	new_settings.c_lflag &= ~(ICANON|ECHO);
+	new_settings.c_cc[VTIME] = 0;
+	new_settings.c_cc[VMIN] = 1;
 	tcsetattr (0, TCSANOW, &new_settings);
 
-    	int ret = 0;
-    	char c;
- 
+	int ret = 0;
+	char c;
 
 
-    	c = getchar();
 
-    	tcsetattr (0, TCSANOW, &stored_settings); 
+	c = getchar();
 
- 
-    	return c; 
+	tcsetattr (0, TCSANOW, &stored_settings); 
+
+
+	return c; 
 }
 
+int myjobs(char ** args){
+	//可以使用ps命令来实现查看进程
+	pid_t pid;
+	pid=fork();//必须fork，否则会出现myshell退出这种奇怪的bug
+	if(pid<0){
+		perror("myshell: fork");
+	}
+	else if(pid==0){//子进程
+		if(cmd_cnt>1){
+			printf("myshell: jobs: incorrect use of jobs\n");
+		}
+		else{
+			execlp("ps","ps","ax",NULL);//使用ps
+		}
+	}
+	else{//父进程
+		waitpid(pid,NULL,0);
+	}
+	return 1;
+}
+
+void init(){
+	// pid_t pid = fork();
+  	// if (pid == 0) {
+	// 	char *argvlist[]={(char *)"/usr/local/bin/lolcat",(char *)"./tri/wel.txt", NULL};
+	// 	execve(argvlist[0],argvlist,NULL);
+	// } else if (pid < 0) {
+    // 	// Error forking
+    // 	perror("Linux-Shell:");
+  	// } else {
+    // 	// Parent process
+	// 	int status;
+	// 	waitpid(pid, &status, 0);
+    // 	loop();
+  	// }
+	printf("hello master!\n");
+	loop();
+	
+}
 
 char * read_line() {
 	int bufsize = RL_BUFSIZE;
 	char *buffer = (char *)malloc(sizeof(char) * bufsize);
-
-	char *tempBuffer = (char *)malloc(sizeof(char) * bufsize);;//为单条命令（被空格分割的命令）分配临时内存
-
+	char *tempBuffer = (char *)malloc(sizeof(char) * bufsize);;//为单条命令（被空格分割的命令）分配临时内存 ++
 	int position = 0;
 	int tempPosition = 0;
+	background = 0;
 	int c;
 	if (!buffer) {
-    		fprintf(stderr, "Allocation Error!\n");
-    		exit(EXIT_FAILURE);
+    	fprintf(stderr, "Allocation Error!\n");
+    	exit(EXIT_FAILURE);
   	}
+
 	int notSpaceNum = 0;
 	int tabNum = 0;
 
-  	tag: while(true) {
+  	// while(true) {
+  	// 	c = getchar();
+	tag: while(true) {
   		c = getonechar();
   		if (c == EOF) {
-      			exit(EXIT_SUCCESS);
-    		} else if((int)c == 127) {
-			if(position <= 0) {
-				continue;
-			} else {
-				putchar('\b');
-				putchar(' ');
-				MOVELEFT(1);
-				position--;
-				tempPosition--;
-				notSpaceNum--;
-				tabNum = 0;
-			}
-				
-		} else if(c == '\n') {
+      	// 	exit(EXIT_SUCCESS);
+    	// } else if (c == '\n') {
+		// 	if(buffer[position-1]=='&')
+		// 	{
+		// 		background = 1;   //background order
+		// 		buffer[--position] = '\0';
+		// 	}else	
+      	// 		buffer[position] = '\0';
+		// 	add_history(buffer);
+      	// 	return buffer;
+    	// } else {
+      	// 	buffer[position] = c;
+    	// }
+    	// position++;
+    		exit(EXIT_SUCCESS);
+    		} 
+		else if((int)c == 127) {
+				if(position <= 0) {
+					continue;
+				} else {
+					putchar('\b');
+					putchar(' ');
+					MOVELEFT(1);
+					position--;
+					tempPosition--;
+					notSpaceNum--;
+					tabNum = 0;
+				}		
+		} 
+		else if(c == '\n') {
 			putchar(c);
       			buffer[position] = '\0';
 			tabNum = 0;
       			return buffer;
-    		} else if(c == '\t') {
+    		} 
+		else if(c == '\t') {
 			tabNum ++;
 			tabNum = tabNum % 2;
 			char basePath[250];
@@ -349,48 +417,48 @@ char * read_line() {
 			
     		}
  
-    	
-    		if (position >= bufsize) {
-      			bufsize += RL_BUFSIZE;
-      			buffer = (char *)realloc(buffer, bufsize);
-      			if (!buffer) {
-        			fprintf(stderr, "Allocation Error!\n");
-        			exit(EXIT_FAILURE);
-      			}
-    		}
+    	if (position >= bufsize) {
+      		bufsize += RL_BUFSIZE;
+      		buffer = (char *)realloc(buffer, bufsize);
+      		if (!buffer) {
+        		fprintf(stderr, "Allocation Error!\n");
+        		exit(EXIT_FAILURE);
+      		}
+    	}
   	}
 }
 
 char **split_line(char *line,int &commandNum) {
-  	int bufsize = TOK_BUFSIZE, position = 0;
-  	char **tokens = (char **)malloc(bufsize * sizeof(char*));
-  	char *token, **tokens_backup;
+  int bufsize = TOK_BUFSIZE, position = 0;
+  char **tokens = (char **)malloc(bufsize * sizeof(char*));
+  char *token, **tokens_backup;
 
-  	if (!tokens) {
-   	 	fprintf(stderr, "Allocation Error!\n");
-    		exit(EXIT_FAILURE);
-  	}
+  if (!tokens) {
+    fprintf(stderr, "Allocation Error!\n");
+    exit(EXIT_FAILURE);
+  }
 
-  	token = strtok(line, TOK_DELIM);
-  	while (token != NULL) {
-    	tokens[position] = token;
-   	 position++;
+  token = strtok(line, TOK_DELIM);
+  while (token != NULL) {
+    tokens[position] = token;
+    position++;
     
-    	if (position >= bufsize) {
-      		bufsize += TOK_BUFSIZE;
-      		tokens_backup = tokens;
-      		tokens = (char **)realloc(tokens, bufsize * sizeof(char*));
-      		if (!tokens) {
-			free(tokens_backup);
-        		fprintf(stderr, "Allocation Error\n!");
-        		exit(EXIT_FAILURE);
-      		}
-    	}
+    if (position >= bufsize) {
+      bufsize += TOK_BUFSIZE;
+      tokens_backup = tokens;
+      tokens = (char **)realloc(tokens, bufsize * sizeof(char*));
+      if (!tokens) {
+		free(tokens_backup);
+        fprintf(stderr, "Allocation Error\n!");
+        exit(EXIT_FAILURE);
+      }
+    }
 
-    	token = strtok(NULL, TOK_DELIM);
+    token = strtok(NULL, TOK_DELIM);
   }
   tokens[position] = NULL;
   commandNum=position;
+  cmd_cnt=commandNum;
   return tokens;
 }
 
@@ -466,7 +534,10 @@ int launch(char **args,int commandNum) {
   	} else {
     	// Parent process
     	do {
-      		waitpid(pid, &status, WUNTRACED);
+			if(background==0)
+      			waitpid(pid, &status, WUNTRACED);
+			else
+				printf("pid : [\e[1;32m%d] \n",pid);
     	} while (!WIFEXITED(status) && !WIFSIGNALED(status));
   	}
   	return 1;
@@ -478,7 +549,7 @@ int execute(char **args,int commandNum) {
   	if (args[0] == NULL) {
     	return 1;
   	}
-	add_history(args[0]);//history added
+	
   	for(i = 0; i < num_builtins(); i++) {
     	if (strcmp(args[0], builtin_str[i]) == 0) {
       		return (*builtin_func[i])(args);
@@ -495,13 +566,14 @@ void loop() {
 	history_setup();
   	do {
 		set_prompt(prompt);
-    		line = read_line();
+    	//printf("bug>: ");
+    	line = read_line();
 		int tmp=0;
 		int &commandNum=tmp;
-    		args = split_line(line,commandNum);
-    		status = execute(args,commandNum);
-    		free(line);
-    		free(args);
+    	args = split_line(line,commandNum);
+    	status = execute(args,commandNum);
+    	free(line);
+    	free(args);
   	} while (status);
 	history_finish();
 }
@@ -649,29 +721,59 @@ int callCommandWithRedi(int left, int right) { // 所要执行的指令区间[le
 		execvp(comm[left], comm+left);
 		exit(errno); // 执行出错，返回errno
 	} else {
+		//后台处理子程序出错暂未处理
 		int status;
-		waitpid(pid, &status, 0);
-		int err = WEXITSTATUS(status); // 读取子进程的返回码
+		if(background==0){
+			waitpid(pid, &status, 0);
+			int err = WEXITSTATUS(status); // 读取子进程的返回码
 
-		if (err) { // 返回码不为0，意味着子进程执行出错，用红色字体打印出错信息
-			printf("\e[31;1mError: %s\n\e[0m", strerror(err));
-		}
+			if (err) { // 返回码不为0，意味着子进程执行出错，用红色字体打印出错信息
+				printf("\e[31;1mError: %s\n\e[0m", strerror(err));
+			}
+		}	
+		else
+			printf("pid : [%d] \n",pid);
+		
 	}
 
 
 	return result;
 }
 
+int mytime(char** args){
+	int weekday;
+	int month;
+	time_t tvar;
+	struct tm *tp;
+	time(&tvar);
+	tp=localtime(&tvar);//获取本地时间
+	weekday=tp->tm_wday;
+	char *wday[]={(char *)"Mon ",(char *)"Tues ",(char *)"Wed ",(char *)"Thur ",(char *)"Fri ",(char *)"Sat ",(char *)"Sun "};
+	char *wmonth[]={(char *)"Jan ",(char *)"Feb ",(char *)"Mar ",(char *)"Apr ",(char *)"May ",(char *)"Jun ",(char *)"Jul ",(char *)"Aug ",(char *)"Sep ",(char *)"Oct ",(char *)"Nov ",(char *)"Dec "};
+	printf("%s",wday[weekday-1]);
+	month=1+tp->tm_mon;//必须要加1，经过查阅资料：tm_mon比实际的值少了1
+	printf("%s",wmonth[month-1]);
+	printf("%d ",tp->tm_mday);//日期
+	printf("%d:",tp->tm_hour);//小时
+	printf("%d:",tp->tm_min);//分钟
+	printf("%d ",tp->tm_sec);//秒
+	printf("CST ");//CST，意思是China Standard Time
+	printf("%d\n",1900+tp->tm_year);//必须加上1900，返回的值并不是完整的年份，比真实值少了1900
+	return 1;
+}
 
 void history_setup(){
 	using_history();
 	stifle_history(50);
-	read_history("/tmp/msh_history");	
+	// read_history("/tmp/msh_history");	
+	read_history("./msh_history.txt");	
 }
 
 void history_finish(){
-	append_history(history_length, "/tmp/msh_history");
-	history_truncate_file("/tmp/msh_history", history_max_entries);
+	// append_history(history_length, "/tmp/msh_history");
+	// history_truncate_file("/tmp/msh_history", history_max_entries);
+	append_history(history_length, "./msh_history.txt");
+	history_truncate_file("./msh_history.txt", history_max_entries);
 }
 
 int display_history_list(char ** args){
@@ -687,5 +789,5 @@ int display_history_list(char ** args){
 }
 
 int main() {
-	loop();
+	init();
 }
