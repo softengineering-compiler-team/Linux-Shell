@@ -202,7 +202,7 @@ int cd(char **args) {
 
 int exit(char **args) {
   printf("Bye Bye ! \n");
-  char *argvlist[]={(char *)"/usr/local/bin/lolcat",(char *)"./tri/exit.txt", NULL};
+  char *argvlist[]={(char *)"/usr/local/bin/lolcat",(char *)"/home/zhuzhu/sheng/Linux-Shell/tri/exit.txt", NULL};
   execve(argvlist[0],argvlist,NULL);
   return 0;
 }
@@ -505,7 +505,13 @@ char * read_line() {
 		} 
 		else if(c == '\n') {
 			putchar(c);
-      			buffer[position] = '\0';
+      		if(buffer[position-1]=='&')
+				{
+					background = 1;   //background order
+					buffer[--position] = '\0';
+				}else	
+					buffer[position] = '\0';
+			add_history(buffer);
 			tabNum = 0;
       			return buffer;
     		} 
@@ -937,15 +943,13 @@ int mytime(char** args){
 void history_setup(){
 	using_history();
 	stifle_history(50);
-	// read_history("/tmp/msh_history");	
-	read_history("./msh_history.txt");	
+	read_history("/tmp/msh_history");	
 }
 
 void history_finish(){
-	// append_history(history_length, "/tmp/msh_history");
-	// history_truncate_file("/tmp/msh_history", history_max_entries);
-	append_history(history_length, "./msh_history.txt");
-	history_truncate_file("./msh_history.txt", history_max_entries);
+	append_history(history_length, "/tmp/msh_history");
+	history_truncate_file("/tmp/msh_history", history_max_entries);
+
 }
 
 int display_history_list(char ** args){
