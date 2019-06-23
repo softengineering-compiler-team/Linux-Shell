@@ -10,12 +10,14 @@
 #include<readline/history.h>
 #include<termios.h>
 #include<dirent.h>
+#include<sys/stat.h>
+#include<fcntl.h>
 
 #define MOVELEFT(y) printf("\033[%dD", (y))
 
 #define RL_BUFSIZE 1024
 #define TOK_BUFSIZE 64
-#define TOK_DELIM " \t\r\n\a"
+#define TOK_DELIM " \t\n"
 #define FILE_MAX 250
 #define BUF_SZ 256
 #define TRUE 1
@@ -28,6 +30,9 @@ const char* COMMAND_IN = "<";
 const char* COMMAND_OUT = ">";
 const char* COMMAND_PIPE = "|";
 const char* COMMAND_MYLS = "myls";
+const char* COMMAND_ALIAS = "alias";
+const char* COMMAND_UNALIAS = "unalias";
+const char* COMMAND_CAT = "cat";
 char **args;
 
 enum {
@@ -55,6 +60,9 @@ int cd(char **args);
 int help(char **args);
 int exit(char **args);
 int myls(char **args);
+int alias(char **args);
+int unalias(char **args);
+int cat(char **args);
 int callCommandWithPipe(int left, int right);
 int callCommandWithRedi(int left, int right);
 int isCommandExist(const char* command);
@@ -69,11 +77,35 @@ char *builtin_str[] = {
 	(char *)"help",
   	(char *)"exit",
   	(char *)"history",
-	(char *)"myls"
+	(char *)"myls",
+	(char *)"alias",
+	(char *)"unalias",
+	(char *)"cat"
 };
 
 int num_builtins() {
   	return sizeof(builtin_str) / sizeof(char *);
+}
+
+void display_one_dimension(char *line) {
+	while(*line != '\0') {
+		printf("%c", *line++);
+	}
+	printf("\n");
+
+}
+
+void display(char **args) {
+	int i=0;
+	while(*(args+i) != NULL) {
+		int j=0;
+		while(*(*(args+i)+j) != '\0') {
+			printf("%c", *(*(args+i)+j));
+			j++;
+		}
+		printf("\n");
+		i++;
+	}
 }
 
 int (*builtin_func[]) (char **) = {
@@ -81,7 +113,10 @@ int (*builtin_func[]) (char **) = {
   	&help,
   	&exit,
   	&display_history_list,
-	&myls
+	&myls,
+	&alias,
+	&unalias,
+	&cat
 };
 
 //set the prompt
@@ -148,7 +183,8 @@ int cd(char **args) {
     fprintf(stderr, "Expected argument to \"cd\" not found!\n");
   } else {
     if (chdir(args[1]) != 0) {
-      perror("Linux-Shell:");
+	printf("无文件或目录！\n");
+      	perror("Linux-Shell:");
     }
   }
   return 1;
@@ -213,6 +249,164 @@ int myls(char **args) {
 		filename_pointer++;
 	}
 	return 1;
+}
+
+int alias(char **args) {
+	FILE *fp = fopen("/home/tdye/Shell4Linux/Linux-Shell-master/src/etc/alias.alias", "a+");
+	if(fp == NULL) {
+		fprintf(stderr, "Error occurs while opening alias.alias\n!");
+		return 1;
+
+	}	
+	int i=1;
+	while(*(args+i) != NULL) {
+		int j=0;
+		while(*(*(args+i)+j) != '\0') {
+			fputc(*(*(args+i)+j), fp);
+			j++;
+		}
+		i++;
+		fputc('\n', fp);
+	}
+	fclose(fp);
+	return 1;
+}
+
+int unalias(char **args) {
+	FILE *fp = fopen("/home/tdye/Shell4Linux/Linux-Shell-master/src/etc/alias.alias", "r+");
+	int c;
+	if(fp == NULL) {
+		fclose(fp);
+		FILE *wfp = fopen("/home/tdye/Shell4Linux/Linux-Shell-master/src/etc/alias.alias", "a");
+		fclose(wfp);
+		fp = fopen("/home/tdye/Shell4Linux/Linux-Shell-master/src/etc/alias.alias", "r+");
+	}
+
+	fseek(fp, 0, SEEK_SET);
+
+	while(1) {
+		int i=0;
+		ftag: if(feof(fp)) {
+
+			printf("No such alias command!\n");
+			fclose(fp);
+			return 1;
+		}
+		c = fgetc(fp);
+		if( (int)c == -1) {
+
+			printf("No such alias command!\n");
+			fclose(fp);
+			return 1;
+		} 
+		while(*(*(args+1)+i) != '\0') {
+			while(c != '=') {
+				if(*(*(args+1)+i) != c) {
+					i = 0;
+					while(c != '\n') {
+						
+						c = fgetc(fp);
+					}
+					
+				
+					goto ftag;
+				}
+				break;
+			}
+			i++;
+			goto ftag;
+		}
+		if(*(*(args+1)+i) == '\0' && c == '=') {
+
+			fseek(fp, -(i+1), SEEK_CUR);
+			
+			while(c != '\n') {
+				fputc('\0', fp);
+				c = fgetc(fp);
+				fseek(fp, -1, SEEK_CUR);
+			}
+			fclose(fp);
+			return 1;
+		} else {
+			printf("No such alias command!\n");
+			fclose(fp);
+			return 1;
+		}
+	}
+	
+}
+
+char ** match(char **args) {
+	FILE *fp = fopen("/home/tdye/Shell4Linux/Linux-Shell-master/src/etc/alias.alias", "r+");
+	int c;
+	if(fp == NULL) {
+		FILE *wfp = fopen("/home/tdye/Shell4Linux/Linux-Shell-master/src/etc/alias.alias", "a");
+		fclose(wfp);
+	}
+
+	fseek(fp, 0, SEEK_SET);
+
+	while(1) {
+		int i=0;
+		ftag: if(feof(fp)) {
+			fclose(fp);
+			return args;
+		}
+		c = fgetc(fp);
+		if( (int)c == -1) {
+			fclose(fp);
+			return args;
+		} 
+		while(*(*(args)+i) != '\0') {
+			while(c != '=') {
+				if(*(*(args)+i) != c) {
+					i = 0;
+					while(c != '\n') {
+						c = fgetc(fp);
+					}
+					goto ftag;
+				}
+				break;
+			}
+			i++;
+			goto ftag;
+		}
+		if(*(*(args)+i) == '\0' && c == '=') {
+			int j=0;
+			while((int)c != 10) {
+				c = fgetc(fp);
+				if((int)c != 39 && (int)c != 10) {
+					*(*(args)+j) = c;
+					j++;
+				}
+				
+				
+			}
+			*(*(args)+j) = '\0';
+			fclose(fp);
+			return args;
+		} else {
+			printf("No such alias command!\n");
+			fclose(fp);
+			return args;
+		}
+	}
+		
+}
+
+int cat(char **args) {
+	FILE *fp = fopen(*(args+1), "r");
+	char c;
+	if(fp == NULL) {
+		printf("No such file!\n");
+		return 1;
+	} else {
+		while((c = fgetc(fp)) != EOF) {
+			printf("%c", c);
+		} 
+		return 1;
+	}
+
 }
 
 char getonechar(void) {
@@ -362,6 +556,7 @@ char * read_line() {
 }
 
 char **split_line(char *line,int &commandNum) {
+	//display_one_dimension(line);
   	int bufsize = TOK_BUFSIZE, position = 0;
   	char **tokens = (char **)malloc(bufsize * sizeof(char*));
   	char *token, **tokens_backup;
@@ -373,25 +568,23 @@ char **split_line(char *line,int &commandNum) {
 
   	token = strtok(line, TOK_DELIM);
   	while (token != NULL) {
-    	tokens[position] = token;
-   	 position++;
+    		tokens[position] = token;
+   	 	position++;
     
-    	if (position >= bufsize) {
-      		bufsize += TOK_BUFSIZE;
-      		tokens_backup = tokens;
-      		tokens = (char **)realloc(tokens, bufsize * sizeof(char*));
-      		if (!tokens) {
-			free(tokens_backup);
-        		fprintf(stderr, "Allocation Error\n!");
-        		exit(EXIT_FAILURE);
-      		}
-    	}
-
-    	token = strtok(NULL, TOK_DELIM);
-  }
-  tokens[position] = NULL;
-  commandNum=position;
-  return tokens;
+    		if (position >= bufsize) {
+      			bufsize += TOK_BUFSIZE;
+      			tokens_backup = tokens;
+      			tokens = (char **)realloc(tokens, bufsize * sizeof(char*));
+      			if (!tokens) {
+				free(tokens_backup);
+        			fprintf(stderr, "Allocation Error\n!");
+        			exit(EXIT_FAILURE);
+      			}
+    		}
+    		token = strtok(NULL, TOK_DELIM);
+  	}
+  	commandNum=position;
+ 	return tokens;
 }
 
 int isCommandExist(const char* command) { // 判断指令是否存在
@@ -443,10 +636,10 @@ int isCommandExist(const char* command) { // 判断指令是否存在
 int launch(char **args,int commandNum) {
   	pid_t pid;
   	int status;
-
+	display(args);
  	pid = fork();
   	if (pid == 0) {
-    	// Child process
+    		// Child process
 		/* 获取标准输入、输出的文件标识符 */
 		int inFds = dup(STDIN_FILENO);
 		int outFds = dup(STDOUT_FILENO);
@@ -456,18 +649,21 @@ int launch(char **args,int commandNum) {
 		dup2(inFds, STDIN_FILENO);
 		dup2(outFds, STDOUT_FILENO);
 		exit(result);
-    	// if (execvp(args[0], args) == -1) {
-      	// 	perror("Linux-Shell:");
-    	// }
-    	// exit(EXIT_FAILURE);
+    	 	if (execvp(args[0], args) == -1) {
+			printf("%s\n", *args);
+			printf("%s\n", *(args+1));
+      	 		perror("Linux-Shell:");
+			exit(EXIT_FAILURE);
+    	 	}
+    	 
 	} else if (pid < 0) {
-    	// Error forking
-    	perror("Linux-Shell:");
+    		// Error forking
+    		perror("Linux-Shell:");
   	} else {
-    	// Parent process
-    	do {
-      		waitpid(pid, &status, WUNTRACED);
-    	} while (!WIFEXITED(status) && !WIFSIGNALED(status));
+    		// Parent process
+    		do {
+      			waitpid(pid, &status, WUNTRACED);
+    		} while (!WIFEXITED(status) && !WIFSIGNALED(status));
   	}
   	return 1;
 }
@@ -480,11 +676,16 @@ int execute(char **args,int commandNum) {
   	}
 	add_history(args[0]);//history added
   	for(i = 0; i < num_builtins(); i++) {
-    	if (strcmp(args[0], builtin_str[i]) == 0) {
-      		return (*builtin_func[i])(args);
-    	}
+    		if (strcmp(args[0], builtin_str[i]) == 0) {
+      			return (*builtin_func[i])(args);
+    		}
   	}
-
+	match(args);//args is stored in heap memory, equal to class variable
+	for(i = 0; i < num_builtins(); i++) {
+    		if (strcmp(args[0], builtin_str[i]) == 0) {
+      			return (*builtin_func[i])(args);
+    		}
+  	}
   	return launch(args,commandNum);
 }
 
