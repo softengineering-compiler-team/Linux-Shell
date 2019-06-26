@@ -13,7 +13,7 @@
 #include <readline/readline.h>
 #include <readline/history.h>
 
-#define MOVELEFT(y) printf("\033[%dD", (y))
+#define MOVELEFT(y) printf("\033[%dD", (y))//将屏幕上当前光标回退y个位置
 
 #define RL_BUFSIZE 1024
 #define TOK_BUFSIZE 64
@@ -192,8 +192,8 @@ int cd(char **args) {
   if(args[1] == NULL) {
     fprintf(stderr, "Expected argument to \"cd\" not found!\n"); //命令不含参数则向用户报错
   } else {
-    if (chdir(args[1]) != 0) {
-	printf("无文件或目录！\n");
+    if (chdir(args[1]) != 0) {//用户输入目录名，但是该目录不存在
+	printf("无该目录！\n");
       	perror("Linux-Shell:");
     }
   }
@@ -210,8 +210,8 @@ int exit(char **args) {
 
 char **readFileList(char *basePath) {
 	int position = 0;
-  	char **filename_pointer = (char **)malloc(FILE_MAX * sizeof(char*));
-  	char *filename;
+  	char **filename_pointer = (char **)malloc(FILE_MAX * sizeof(char*));//开辟一段空间，保存指向文件名的指针
+  	char *filename;//指向文件名字符串的指针变量
 
   	if (!filename) {
    	 	fprintf(stderr, "Allocation Error!\n");
@@ -221,28 +221,28 @@ char **readFileList(char *basePath) {
 
 	DIR * dir;
 	struct dirent *ptr;
-	if((dir = opendir(basePath)) == NULL) {
+	if((dir = opendir(basePath)) == NULL) {//打开给定文件目录，返回一指向该文件目录的指针
 		perror("Open Dir Error!\n");
 		exit(1);
 	}
-	while((ptr = readdir(dir)) != NULL) {
+	while((ptr = readdir(dir)) != NULL) {//顺序读取文件目录，返回一指向文件索引结构体的指针
 		if(strcmp(ptr->d_name, ".") == 0||strcmp(ptr->d_name, "..") == 0) {
 			continue;
 		} else {
-			filename = ptr->d_name;
-			filename_pointer[position] = filename;	
+			filename = ptr->d_name;//获取文件名字符串
+			filename_pointer[position] = filename;//将指向文件名字符串的指针存放在二级指针中
 			position++;
 		}
 	}
-	filename_pointer[position] = NULL;
-	closedir(dir);
+	filename_pointer[position] = NULL;//顺序访问完当前目录下的所有文件，以NULL分界，方便后续访问和统计
+	closedir(dir);\\文件打开后，在访问完后必须关闭
 	return filename_pointer;
 }
 
 int fileNum(char **filename_pointer) {
 	int num = 0;
 	while(*filename_pointer != NULL) {
-		filename_pointer++;
+		filename_pointer++;//根据文件名个数 ，返回当前文件目录下的文件数量
 		num++;
 	}
 	return num;
@@ -250,55 +250,55 @@ int fileNum(char **filename_pointer) {
 
 int myls(char **args) {
 	DIR *dir;
-	char basePath[250];
-	memset(basePath, '\0', sizeof(basePath));
-	getcwd(basePath, 249);
-	char **filename_pointer = readFileList(basePath);
-	printf("File Num:%d|\n", fileNum(filename_pointer));
+	char basePath[250];//开辟一段空间，保存当前文件路径
+	memset(basePath, '\0', sizeof(basePath));//将新开辟空间赋初值\0
+	getcwd(basePath, 249);//获取当前文件目录
+	char **filename_pointer = readFileList(basePath);//调用readFileList函数，该函数返回存储当前文件目录下的所有文件名字符串指针的一块空间的首地址
+	printf("File Num:%d|\n", fileNum(filename_pointer));//调用fileNum函数，清点当前文件目录下的文件数量
 	printf("----------\n");
 	while(*filename_pointer != NULL) {
-		printf("%s\n", *(filename_pointer));
+		printf("%s\n", *(filename_pointer));//根据readFileList返回的指针，顺序打印每个文件名
 		filename_pointer++;
 	}
 	return 1;
 }
 
 int alias(char **args) {
-	FILE *fp = fopen("/home/tdye/Shell4Linux/Linux-Shell-master/src/etc/alias.alias", "a+");
+	FILE *fp = fopen("/home/tdye/Shell4Linux/Linux-Shell-master/src/etc/alias.alias", "a+");//以追加的形式打开alias.alias文件，如果该文件在该文件夹下不存在，则自动创建该文件
 	if(fp == NULL) {
-		fprintf(stderr, "Error occurs while opening alias.alias\n!");
+		fprintf(stderr, "Error occurs while opening alias.alias\n!");//文件打开失败
 		return 1;
 
 	}	
 	int i=1;
-	while(*(args+i) != NULL) {
+	while(*(args+i) != NULL) {//获取重命名命令行，例如alias dirrr='cd'，该部分获取dirrr='cd'，并将其追加到alias.alias文件中，每条记录以\n分界
 		int j=0;
 		while(*(*(args+i)+j) != '\0') {
 			fputc(*(*(args+i)+j), fp);
 			j++;
 		}
 		i++;
-		fputc('\n', fp);
+		fputc('\n', fp);//每条记录以\n分界
 	}
-	fclose(fp);
+	fclose(fp);//关闭alias.alias文件
 	return 1;
 }
 
 int unalias(char **args) {
-	FILE *fp = fopen("/home/tdye/Shell4Linux/Linux-Shell-master/src/etc/alias.alias", "r+");
+	FILE *fp = fopen("/home/tdye/Shell4Linux/Linux-Shell-master/src/etc/alias.alias", "r+");//以读写的方式打开alias.alias文件
 	int c;
-	if(fp == NULL) {
+	if(fp == NULL) {//如果该文件尚不存在，则创建该文件，同时也可以直接返回错误信息给用户，因为用户尚未重命名命令
 		fclose(fp);
 		FILE *wfp = fopen("/home/tdye/Shell4Linux/Linux-Shell-master/src/etc/alias.alias", "a");
 		fclose(wfp);
 		fp = fopen("/home/tdye/Shell4Linux/Linux-Shell-master/src/etc/alias.alias", "r+");
 	}
 
-	fseek(fp, 0, SEEK_SET);
+	fseek(fp, 0, SEEK_SET);//将访问指针fp置于文件头
 
 	while(1) {
 		int i=0;
-		ftag: if(feof(fp)) {
+		ftag: if(feof(fp)) {//如果已经访问到文件末尾，尚未检索到用户输入的需要取消重命名的命令，则给用户返回信息No such alias command!
 
 			printf("No such alias command!\n");
 			fclose(fp);
@@ -311,7 +311,7 @@ int unalias(char **args) {
 			fclose(fp);
 			return 1;
 		} 
-		while(*(*(args+1)+i) != '\0') {
+		while(*(*(args+1)+i) != '\0') {//针对每一行重命名记录进行匹配，只要非完全匹配则跳过本行进行下一行匹配
 			while(c != '=') {
 				if(*(*(args+1)+i) != c) {
 					i = 0;
@@ -328,16 +328,16 @@ int unalias(char **args) {
 			i++;
 			goto ftag;
 		}
-		if(*(*(args+1)+i) == '\0' && c == '=') {
+		if(*(*(args+1)+i) == '\0' && c == '=') {//等于号之前检索到完全匹配用户输入的待取消的指令
 
-			fseek(fp, -(i+1), SEEK_CUR);
+			fseek(fp, -(i+1), SEEK_CUR);//将当前访问指针fp前移至该条记录的首地址
 			
-			while(c != '\n') {
+			while(c != '\n') {//从该条记录的首地址开始，逐个字符进行覆盖为空，直至该条记录的末端\n
 				fputc('\0', fp);
 				c = fgetc(fp);
 				fseek(fp, -1, SEEK_CUR);
 			}
-			fclose(fp);
+			fclose(fp);//关闭该alias.alias文件
 			return 1;
 		} else {
 			printf("No such alias command!\n");
@@ -348,7 +348,7 @@ int unalias(char **args) {
 	
 }
 
-char ** match(char **args) {
+char ** match(char **args) {//当用户输入非内置的命令时，首先检索alias.alias文件,将该重命名命令翻译成内置命令
 	FILE *fp = fopen("/home/tdye/Shell4Linux/Linux-Shell-master/src/etc/alias.alias", "r+");
 	int c;
 	if(fp == NULL) {
@@ -362,7 +362,7 @@ char ** match(char **args) {
 		int i=0;
 		ftag: if(feof(fp)) {
 			fclose(fp);
-			return args;
+			return args;//该命令也非重命名命令，直接返回原参数列表
 		}
 		c = fgetc(fp);
 		if( (int)c == -1) {
@@ -383,7 +383,8 @@ char ** match(char **args) {
 			i++;
 			goto ftag;
 		}
-		if(*(*(args)+i) == '\0' && c == '=') {
+
+		if(*(*(args)+i) == '\0' && c == '=') {//匹配到用户输入的重命名指令，并用内置指令覆盖重命名指令，返回处理后的参数列表
 			int j=0;
 			while((int)c != 10) {
 				c = fgetc(fp);
@@ -406,39 +407,39 @@ char ** match(char **args) {
 		
 }
 
-int cat(char **args) {
+int cat(char **args) {//打开文件，并依次读取文件内容，输出到终端
 	FILE *fp = fopen(*(args+1), "r");
 	char c;
 	if(fp == NULL) {
-		printf("No such file!\n");
+		printf("No such file!\n");//需要cat的文件不存在
 		return 1;
 	} else {
 		while((c = fgetc(fp)) != EOF) {
-			printf("%c", c);
+			printf("%c", c);//打印文件内容到终端
 		} 
 		return 1;
 	}
 
 }
 
-char getonechar(void) {
+char getonechar(void) {//将输入缓冲区置一，每次读取一个字符进行判断是否需要命令补全，准确说就是为了实时检测TAB键
 	struct termios stored_settings;
 	struct termios new_settings;
-	tcgetattr (0, &stored_settings);
-	new_settings = stored_settings;
+	tcgetattr (0, &stored_settings);//获取原输入缓冲设置
+	new_settings = stored_settings;//将原输入缓冲设置赋值给一新结构体
 	new_settings.c_lflag &= ~(ICANON|ECHO);
-	new_settings.c_cc[VTIME] = 0;
-	new_settings.c_cc[VMIN] = 1;
-	tcsetattr (0, TCSANOW, &new_settings);
+	new_settings.c_cc[VTIME] = 0;//输入缓冲区响应时间置0，立即回显到屏幕
+	new_settings.c_cc[VMIN] = 1;//将输入缓冲区大小置为1
+	tcsetattr (0, TCSANOW, &new_settings);//使修改后输入缓冲设置生效
 
 	int ret = 0;
 	char c;
 
 
 
-	c = getchar();
+	c = getchar();//获取单个字符
 
-	tcsetattr (0, TCSANOW, &stored_settings); 
+	tcsetattr (0, TCSANOW, &stored_settings); //将原输入缓冲设置复位
 
 
 	return c; 
@@ -472,10 +473,10 @@ void init(){
 
 char * read_line() {
 	int bufsize = RL_BUFSIZE;
-	char *buffer = (char *)malloc(sizeof(char) * bufsize);
+	char *buffer = (char *)malloc(sizeof(char) * bufsize);//为当前输入指令分配内存
 	char *tempBuffer = (char *)malloc(sizeof(char) * bufsize);;//为单条命令（被空格分割的命令）分配临时内存 ++
 	int position = 0; //保存指令长度
-	int tempPosition = 0;
+	int tempPosition = 0;//当用户输入TAB键时，保存当前输入参数字段（以空格分开）的大小或者字符位置
 	background = 0;//标记该指令是否为后台函数
 	int c;
 	if (!buffer) {
@@ -483,15 +484,15 @@ char * read_line() {
     	exit(EXIT_FAILURE);
   	}
 
-	int notSpaceNum = 0;
-	int tabNum = 0;
+	int notSpaceNum = 0;//非空格个数，即当前输入字段的字符数量，用于中断光标回退
+	int tabNum = 0;//检测TAB键个数，0（2）个时返回当前文件夹下的所有文件，1个时，匹配文件名
 
 	tag: while(true) {
   		c = getonechar();
   		if (c == EOF) {
     		exit(EXIT_SUCCESS);
     		} 
-		else if((int)c == 127) {
+		else if((int)c == 127) {//当用户键入backspace时，用position控制光标回退，防止屏幕光标回退越界
 				if(position <= 0) {
 					continue;
 				} else {
@@ -518,19 +519,19 @@ char * read_line() {
     		} 
 		else if(c == '\t') {
 			tabNum ++;
-			tabNum = tabNum % 2;
-			char basePath[250];
+			tabNum = tabNum % 2;//检测当前用户键入TAB键的数量
+			char basePath[250];//获取当前文件目录
 			memset(basePath, '\0', sizeof(basePath));
 			getcwd(basePath, 249);
 			char **filename_pointer = readFileList(basePath);
-			if(tabNum == 1) {
+			if(tabNum == 1) {//当用户输入一次TAB时，顺序匹配当前文件目录下的所有文件，返回最大匹配的文件名
 				for (int i = 0; i < fileNum(filename_pointer); i++) {
 					for(int j=0; j<tempPosition; j++) {
 						if(*(tempBuffer+j) != *(filename_pointer[i]+j)) {
 							break;			
 						}
 						if(j == tempPosition-1) {
-							position = position - notSpaceNum;
+							position = position - notSpaceNum;//将当前输入的非完全文件名清空
 							for(int k=0; k<notSpaceNum; k++) {
 								putchar('\b');
 								putchar(' ');
@@ -538,7 +539,7 @@ char * read_line() {
 							}
 
 							int t = 0;
-							while(*(*(filename_pointer+i)+t) != '\0') {
+							while(*(*(filename_pointer+i)+t) != '\0') {//将匹配到的文件名送赋值到输入参数的相应位置
 								buffer[position] = *(*(filename_pointer+i)+t);
 								t++;
 								position++;
@@ -553,7 +554,7 @@ char * read_line() {
 					
 	  			}
 			} else {
-				printf("\n");
+				printf("\n");//用户键入两次TAB键，将当前文件夹下所有文件名显示到屏幕上
 				for (int i = 0; i < fileNum(filename_pointer); i++) {
 					for(int j=0; j<tempPosition; j++) {
 						if(*(tempBuffer+j) != *(filename_pointer[i]+j)) {
@@ -571,7 +572,7 @@ char * read_line() {
 
 
 		} else {
-			if((int)c == 32||c == '/') {
+			if((int)c == 32||c == '/') {//当用户需要执行可执行文件时，匹配/
 				tempPosition = 0;
 				notSpaceNum = 0;
 			} else {
