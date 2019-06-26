@@ -1,6 +1,8 @@
 #include<stdio.h>
+#include<iostream>
+#include<string>
 #include<stdlib.h>
-#include<string.h>
+
 #include<unistd.h>
 #include<errno.h>
 #include<pwd.h>
@@ -23,6 +25,10 @@
 #define TRUE 1
 #define FALSE 0
 
+#define CLOSE "\001\033[0m\002"                 // 关闭所有属性
+#define BLOD  "\001\033[1m\002"                 // 强调、加粗、高亮
+#define BEGIN(x,y) "\001\033["#x";"#y"m\002"    // x: 背景，y: 前景
+
 const char* COMMAND_EXIT = "exit";
 const char* COMMAND_HELP = "help";
 const char* COMMAND_CD = "cd";
@@ -34,6 +40,12 @@ const char* COMMAND_ALIAS = "alias";
 const char* COMMAND_UNALIAS = "unalias";
 const char* COMMAND_CAT = "cat";
 char **args;
+char ** args_ ;
+char prompt[100];//数组不要开太小 会溢出
+char hostname[100];//保存用户还主机姓名
+char cwd[100];//保存用户当前目录
+int commandnum;
+
 
 enum {
 	RESULT_NORMAL,
@@ -87,7 +99,7 @@ char *builtin_str[] = {
   	(char *)"myjobs",
 	(char *)"alias",
 	(char *)"unalias",
-	(char *)"cat"
+	(char *)"mycat"
 };
 
 int num_builtins() {
@@ -130,8 +142,7 @@ int (*builtin_func[]) (char **) = {
 
 //设置用户进入系统的提示信息
 void set_prompt(char *prompt){
-	char hostname[100];//保存用户还主机姓名
-	char cwd[100];//保存用户当前目录
+	
 	char super = '#';
 	//遇到‘/’来截断当前字符串
 	char delims[] = "/";
@@ -171,8 +182,10 @@ void set_prompt(char *prompt){
 	else
 		super = '$';
 	//打印用户主机和当前工作目录
-	sprintf(prompt, "\e[1;32m%s@%s\e[0m:\e[1;31m%s\e[0m%c",pwp->pw_name,hostname,cwd,super);	
-	printf("%s",prompt);
+	//sprintf(prompt, "\e[1;32m%s@%s\e[0m:\e[1;31m%s\e[0m%c",pwp->pw_name,hostname,cwd,super);
+	sprintf(prompt, "\001\033[1;32m\002%s@%s\001\033[0m\002:\001\033[1;31m\002%s\001\033[0m\002%c",pwp->pw_name,hostname,cwd,super);
+	//在输出的头和尾加 \001 and \002
+	//printf("%s",prompt);
 }
 
 int help(char **args) {
@@ -235,7 +248,7 @@ char **readFileList(char *basePath) {
 		}
 	}
 	filename_pointer[position] = NULL;//顺序访问完当前目录下的所有文件，以NULL分界，方便后续访问和统计
-	closedir(dir);\\文件打开后，在访问完后必须关闭
+	closedir(dir);//文件打开后，在访问完后必须关闭
 	return filename_pointer;
 }
 
@@ -264,13 +277,22 @@ int myls(char **args) {
 }
 
 int alias(char **args) {
-	FILE *fp = fopen("/home/tdye/Shell4Linux/Linux-Shell-master/src/etc/alias.alias", "a+");//以追加的形式打开alias.alias文件，如果该文件在该文件夹下不存在，则自动创建该文件
+	FILE *fp = fopen("/home/zhuzhu/下载/Linux-Shell-master/src/etc/alias.alias", "a+");//以追加的形式打开alias.alias文件，如果该文件在该文件夹下不存在，则自动创建该文件
 	if(fp == NULL) {
 		fprintf(stderr, "Error occurs while opening alias.alias\n!");//文件打开失败
 		return 1;
 
 	}	
 	int i=1;
+	// while(*(args+i) != NULL) {//获取重命名命令行，例如alias dirrr='cd'，该部分获取dirrr='cd'，并将其追加到alias.alias文件中，每条记录以\n分界
+	// 	int j=0;
+	// 	while(*(*(args+i)+j) != '\0') {
+	// 		fputc(*(*(args+i)+j), fp);
+	// 		j++;
+	// 	}
+	// 	i++;
+	// 	fputc('\n', fp);//每条记录以\n分界
+	// }
 	while(*(args+i) != NULL) {//获取重命名命令行，例如alias dirrr='cd'，该部分获取dirrr='cd'，并将其追加到alias.alias文件中，每条记录以\n分界
 		int j=0;
 		while(*(*(args+i)+j) != '\0') {
@@ -278,20 +300,21 @@ int alias(char **args) {
 			j++;
 		}
 		i++;
-		fputc('\n', fp);//每条记录以\n分界
+		fputc(' ',fp);
 	}
+	fputc('\n', fp);//每条记录以\n分界
 	fclose(fp);//关闭alias.alias文件
 	return 1;
 }
 
 int unalias(char **args) {
-	FILE *fp = fopen("/home/tdye/Shell4Linux/Linux-Shell-master/src/etc/alias.alias", "r+");//以读写的方式打开alias.alias文件
+	FILE *fp = fopen("/home/zhuzhu/下载/Linux-Shell-master/src/etc/alias.alias", "r+");//以读写的方式打开alias.alias文件
 	int c;
 	if(fp == NULL) {//如果该文件尚不存在，则创建该文件，同时也可以直接返回错误信息给用户，因为用户尚未重命名命令
 		fclose(fp);
-		FILE *wfp = fopen("/home/tdye/Shell4Linux/Linux-Shell-master/src/etc/alias.alias", "a");
+		FILE *wfp = fopen("/home/zhuzhu/下载/Linux-Shell-master/src/etc/alias.alias", "a");
 		fclose(wfp);
-		fp = fopen("/home/tdye/Shell4Linux/Linux-Shell-master/src/etc/alias.alias", "r+");
+		fp = fopen("/home/zhuzhu/下载/Linux-Shell-master/src/etc/alias.alias", "r+");
 	}
 
 	fseek(fp, 0, SEEK_SET);//将访问指针fp置于文件头
@@ -349,61 +372,53 @@ int unalias(char **args) {
 }
 
 char ** match(char **args) {//当用户输入非内置的命令时，首先检索alias.alias文件,将该重命名命令翻译成内置命令
-	FILE *fp = fopen("/home/tdye/Shell4Linux/Linux-Shell-master/src/etc/alias.alias", "r+");
+	FILE *fp = fopen("/home/zhuzhu/下载/Linux-Shell-master/src/etc/alias.alias", "r+");
 	int c;
 	if(fp == NULL) {
-		FILE *wfp = fopen("/home/tdye/Shell4Linux/Linux-Shell-master/src/etc/alias.alias", "a");
+		printf("fp NULL!");
+		FILE *wfp = fopen("/home/zhuzhu/下载/Linux-Shell-master/src/etc/alias.alias", "a");
 		fclose(wfp);
 	}
 
 	fseek(fp, 0, SEEK_SET);
-
-	while(1) {
+	char str[50];
+	while(!feof(fp)){
+		fgets(str,50,fp);
 		int i=0;
-		ftag: if(feof(fp)) {
-			fclose(fp);
-			return args;//该命令也非重命名命令，直接返回原参数列表
-		}
-		c = fgetc(fp);
-		if( (int)c == -1) {
-			fclose(fp);
-			return args;
-		} 
-		while(*(*(args)+i) != '\0') {
-			while(c != '=') {
-				if(*(*(args)+i) != c) {
-					i = 0;
-					while(c != '\n') {
-						c = fgetc(fp);
-					}
-					goto ftag;
-				}
-				break;
-			}
+		while(str[i]!=char(NULL)&&*(*(args)+i)!=char(NULL)&&str[i]==*(*(args)+i)&&str[i+1]!='=')
 			i++;
-			goto ftag;
-		}
-
-		if(*(*(args)+i) == '\0' && c == '=') {//匹配到用户输入的重命名指令，并用内置指令覆盖重命名指令，返回处理后的参数列表
-			int j=0;
-			while((int)c != 10) {
-				c = fgetc(fp);
-				if((int)c != 39 && (int)c != 10) {
-					*(*(args)+j) = c;
-					j++;
+		if(str[i+1]=='='){
+			//printf("matched!!!\n");
+			i+=3;//引号
+			// printf("%c\n",str[i]);
+			// printf("%c\n",str[i+1]);
+			char **tokens = (char **)malloc(FILE_MAX * sizeof(char*));
+			
+			int j=0,k=0;
+			while(int(str[i])!=39){
+				char *token=(char *)malloc(sizeof(char)*10);
+				j=0;
+				while(int(str[i])!=39&&str[i]!=' '){
+					token[j++]=str[i++];
 				}
-				
-				
+				if(str[i]==' ')
+					{
+						token[j]='\0';
+						tokens[k++]=token;
+						i++;
+					}
+					else {
+						token[j]='\0';
+						tokens[k++]=token;
+					}
 			}
-			*(*(args)+j) = '\0';
-			fclose(fp);
-			return args;
-		} else {
-			printf("No such alias command!\n");
-			fclose(fp);
-			return args;
+			tokens[k]=NULL;
+			commandnum=k;
+			return tokens;
 		}
 	}
+	//printf("no response!\n");
+	return args;
 		
 }
 
@@ -467,8 +482,19 @@ int myjobs(char ** args){
 }
 
 void init(){
-	printf("hello master!\n");
-	loop();
+	pid_t pid = fork();
+  	if (pid == 0) {
+		char *argvlist[]={(char *)"/usr/local/bin/lolcat",(char *)"/home/zhuzhu/sheng/Linux-Shell/tri/wel.txt", NULL};
+		execve(argvlist[0],argvlist,NULL);
+	} else if (pid < 0) {
+    	// Error forking
+    	perror("Linux-Shell:");
+  	} else {
+    	// Parent process
+		int status;
+		waitpid(pid, &status, 0);
+    	loop();
+  	}
 }
 
 char * read_line() {
@@ -514,6 +540,7 @@ char * read_line() {
 				}else	
 					buffer[position] = '\0';//终结字符串
 			add_history(buffer);//将该条命令添加到用户缓存之中
+			write_history("/home/zhuzhu/下载/Linux-Shell-master/src/etc/msh_history.txt");
 			tabNum = 0;
       			return buffer;
     		} 
@@ -684,7 +711,8 @@ int isCommandExist(const char* command) { // 判断指令是否存在
 int launch(char **args,int commandNum) {  //执行其他指令的运行
   	pid_t pid;  //创建新的进程号变量
   	int status;
-	display(args);  //打印用户输入的命令
+	//printf("launch:");
+	//display(args);  //打印用户输入的命令
  	pid = fork();  //创建子进程
   	if (pid == 0) {
     		// Child process
@@ -697,31 +725,23 @@ int launch(char **args,int commandNum) {  //执行其他指令的运行
 		dup2(inFds, STDIN_FILENO);
 		dup2(outFds, STDOUT_FILENO);
 		exit(result);
-    	 	if (execvp(args[0], args) == -1) {  //如果调用执行失败就报错
-			printf("%s\n", *args); //输出字符串
-			printf("%s\n", *(args+1));
-      	 		perror("Linux-Shell:");
-			exit(EXIT_FAILURE);//保存状态
-    	 	}
     	 
 	} else if (pid < 0) {
     		// fork执行失败
     		perror("Linux-Shell:");
   	} else {
-    	// 父进程返回
-    	do {
-			if(background==0)  //不是后台进程则等待执行结果
-      			waitpid(pid, &status, WUNTRACED);
-			else
-				printf("pid : [\e[1;32m%d] \n",pid); //打印后台进程的进程号
-    	} while (!WIFEXITED(status) && !WIFSIGNALED(status));
+    	// 父进程返
+		// if(background==0)  //不是后台进程则等待执行结果
+			waitpid(pid, &status, WUNTRACED);
+		// else
+		// 	printf("pid : [\e[1;32m%d] \n",pid); //打印后台进程的进程号
   	}
   	return 1;
 }
 
 int execute(char **args,int commandNum) { //分析执行用户输入的命令
   	int i;
-
+    args_ = (char **)malloc(TOK_BUFSIZE * sizeof(char*));
   	if (args[0] == NULL) {
     	return 1;
   	}
@@ -731,30 +751,57 @@ int execute(char **args,int commandNum) { //分析执行用户输入的命令
       			return (*builtin_func[i])(args);  //返回符合的函数调用
     		}
   	}
-	match(args);//args 被储存在一个堆中 等价于类变量
+	args_ = match(args);//args 被储存在一个堆中 等价于类变量
+	//display(args_);
 	for(i = 0; i < num_builtins(); i++) {
-    		if (strcmp(args[0], builtin_str[i]) == 0) {
-      			return (*builtin_func[i])(args);
+    		if (strcmp(args_[0], builtin_str[i]) == 0) {
+      			return (*builtin_func[i])(args_);
     		}
   	}
-  	return launch(args,commandNum); //若不出现在该数组中调用launch函数执行
+	if(args==args_)
+		return launch(args,commandNum);
+  	return launch(args_,commandnum); //若不出现在该数组中调用launch函数执行
 }
-
+char* check_line(char *line){
+	int i=0;
+	background=0;
+	while(line[i]!=(char)NULL){
+		if(line[i+1]==(char)NULL){
+			if(line[i]==' '){
+				//printf("Error:Redundent Space !");
+				return line;
+			}
+			if(line[i]=='&'){
+				background=1;
+				while(line[--i]==' ');
+                char * tmp=(char * )malloc(sizeof(char)*(i+1));
+                for(int j=0;j<=i;j++)
+                    tmp[j]=line[j];
+                tmp[i+1]=(char)NULL;
+                return tmp;	
+			}		
+			
+		}
+		i++;
+	}
+	return line;
+}
 void loop() { //循环等待用户的指令
 	char *line;
-	char prompt[100];//数组不要开太小 会溢出
   	int status;  //执行的状态
 	history_setup(); //历史初始化 
   	do {
 		set_prompt(prompt); //设置提示信息
-    	//printf("bug>: ");
-    	line = read_line();  //读取用户输入的字符串命令
+    	//line = read_line();  //读取用户输入的字符串命令
+		line=readline(prompt);
+		line=check_line(line);
 		int tmp=0;
 		int &commandNum=tmp;  //用于临时保存通信变量
     	args = split_line(line,commandNum); //调用分割函数分析命令
     	status = execute(args,commandNum); //status保存函数调用后返回的结果
     	free(line);  //释放内存
     	free(args);
+		//free(args_);
   	} while (status);
 	history_finish();  //历史保存空间回收
 }
@@ -786,7 +833,7 @@ int pipeCommand(int left, int right) { // 所要执行的指令区间[left, righ
 	/* 判断是否有管道命令 */
 	int pipeIdx = -1;   //设置指向当前字符的变量
 	for (int i=left; i<right; ++i) {  //从左至右依次比较
-		if (strcmp(args[i], COMMAND_PIPE) == 0) {
+		if (strcmp(args_[i], COMMAND_PIPE) == 0) {
 			pipeIdx = i;
 			break;
 		}
@@ -842,7 +889,7 @@ int pipeCommand(int left, int right) { // 所要执行的指令区间[left, righ
 }
 
 int redirectCommand(int left, int right) { // 所要执行的指令区间[left, right)，不含管道，可能含有重定向
-	if (!isCommandExist(args[left])) { // 指令不存在
+	if (!isCommandExist(args_[left])) { // 指令不存在
 		return ERROR_COMMAND;
 	}	
 
@@ -852,17 +899,17 @@ int redirectCommand(int left, int right) { // 所要执行的指令区间[left, 
 	int endIdx = right; // 指令在重定向前的终止下标
 
 	for (int i=left; i<right; ++i) {
-		if (strcmp(args[i], COMMAND_IN) == 0) { // 输入重定向
+		if (strcmp(args_[i], COMMAND_IN) == 0) { // 输入重定向
 			++inNum;
 			if (i+1 < right)
-				inFile = args[i+1];
+				inFile = args_[i+1];
 			else return ERROR_MISS_PARAMETER; // 重定向符号后缺少文件名
 
 			if (endIdx == right) endIdx = i;
-		} else if (strcmp(args[i], COMMAND_OUT) == 0) { // 输出重定向
+		} else if (strcmp(args_[i], COMMAND_OUT) == 0) { // 输出重定向
 			++outNum;
 			if (i+1 < right)
-				outFile = args[i+1];
+				outFile = args_[i+1];
 			else return ERROR_MISS_PARAMETER; // 重定向符号后缺少文件名
 				
 			if (endIdx == right) endIdx = i;
@@ -897,7 +944,7 @@ int redirectCommand(int left, int right) { // 所要执行的指令区间[left, 
 		/* 执行命令 */
 		char* comm[BUF_SZ];
 		for (int i=left; i<endIdx; ++i)
-			comm[i] = args[i];
+			comm[i] = args_[i];
 		comm[endIdx] = NULL;
 		execvp(comm[left], comm+left);
 		exit(errno); // 执行出错，返回errno
@@ -913,7 +960,7 @@ int redirectCommand(int left, int right) { // 所要执行的指令区间[left, 
 			}
 		}	
 		else
-			printf("pid : [%d] \n",pid);
+			printf("pid : [\e[1;31m%d] \n",pid);
 		
 	}
 
@@ -947,12 +994,12 @@ int mytime(char** args){
 void history_setup(){
 	using_history(); //调用函数启动历史保存
 	stifle_history(50);
-	read_history("/tmp/msh_history");	//设置缓存路径
+	read_history("/home/zhuzhu/下载/Linux-Shell-master/src/etc/msh_history.txt");	//设置缓存路径
 }
 
 void history_finish(){
-	append_history(history_length, "/tmp/msh_history");  //结束历史数据的保存
-	history_truncate_file("/tmp/msh_history", history_max_entries);
+	append_history(history_length, "/home/zhuzhu/下载/Linux-Shell-master/src/etc/msh_history.txt");  //结束历史数据的保存
+	history_truncate_file("/home/zhuzhu/下载/Linux-Shell-master/src/etc/msh_history.txt", history_max_entries);
 
 }
 
@@ -969,5 +1016,6 @@ int display_history_list(char ** args){
 }
 
 int main() { //主函数
+	
 	init();
 }
