@@ -2,7 +2,6 @@
 #include<iostream>
 #include<string>
 #include<stdlib.h>
-
 #include<unistd.h>
 #include<errno.h>
 #include<pwd.h>
@@ -39,6 +38,7 @@ const char* COMMAND_MYLS = "myls";
 const char* COMMAND_ALIAS = "alias";
 const char* COMMAND_UNALIAS = "unalias";
 const char* COMMAND_CAT = "cat";
+const char* COMMAND_ECHO = "echo";
 char **args;
 char ** args_ ;
 char prompt[100];//数组不要开太小 会溢出
@@ -70,6 +70,7 @@ enum {
 //自定义命令
 int cd(char **args); 
 int help(char **args);//用户帮助，展示该程序的基本功能
+int echo(char **args);
 int exit(char **args);
 int myls(char **args);//实现递归显示当前目录下的所有文件
 int alias(char **args);//实现别名功能
@@ -99,7 +100,8 @@ char *builtin_str[] = {
   	(char *)"myjobs",
 	(char *)"alias",
 	(char *)"unalias",
-	(char *)"mycat"
+	(char *)"mycat",
+	(char *)"echo"
 };
 
 int num_builtins() {
@@ -134,10 +136,11 @@ int (*builtin_func[]) (char **) = {
   	&display_history_list,
 	&myls,
 	&mytime,
-    &myjobs,
+    	&myjobs,
 	&alias,
 	&unalias,
-	&cat
+	&cat,
+	&echo
 };
 
 //设置用户进入系统的提示信息
@@ -739,6 +742,19 @@ int launch(char **args,int commandNum) {  //执行其他指令的运行
   	return 1;
 }
 
+int echo(char **args) {//shell显示字符串
+	if((int)**(args+1) == 36) {
+		char* str;
+		int j=1;
+		str = *(args+1)+1;
+		printf("%s\n", getenv(str));
+		return 1;
+	} else {
+		return launch(args, 2);
+	}
+
+}
+
 int execute(char **args,int commandNum) { //分析执行用户输入的命令
   	int i;
     args_ = (char **)malloc(TOK_BUFSIZE * sizeof(char*));
@@ -746,11 +762,11 @@ int execute(char **args,int commandNum) { //分析执行用户输入的命令
     	return 1;
   	}
 	//循环遍历检查改命令是否出现在之前的数组之中
-  	for(i = 0; i < num_builtins(); i++) {
-    		if (strcmp(args[0], builtin_str[i]) == 0) { //与标准字符串进行比较
-      			return (*builtin_func[i])(args);  //返回符合的函数调用
-    		}
-  	}
+  	// for(i = 0; i < num_builtins(); i++) {
+    // 		if (strcmp(args[0], builtin_str[i]) == 0) { //与标准字符串进行比较
+    //   			return (*builtin_func[i])(args);  //返回符合的函数调用
+    // 		}
+  	// }
 	args_ = match(args);//args 被储存在一个堆中 等价于类变量
 	//display(args_);
 	for(i = 0; i < num_builtins(); i++) {
@@ -795,6 +811,11 @@ void loop() { //循环等待用户的指令
     	//line = read_line();  //读取用户输入的字符串命令
 		line=readline(prompt);
 		line=check_line(line);
+		add_history(line);
+		// FILE* fp;
+		// fp=fopen("/home/zhuzhu/下载/Linux-Shell-master/src/etc/msh_history.txt");
+		// fclose(fp);
+		write_history("/home/zhuzhu/下载/Linux-Shell-master/src/etc/msh_history.txt");
 		int tmp=0;
 		int &commandNum=tmp;  //用于临时保存通信变量
     	args = split_line(line,commandNum); //调用分割函数分析命令
@@ -1004,14 +1025,39 @@ void history_finish(){
 }
 
 int display_history_list(char ** args){
+	int sum;
 	HIST_ENTRY** h = history_list(); //获取保存历史的缓存数组
-	if(h) {
-		int i = 0;
-		while(h[i]) {
-			printf("%d: %s\n", i, h[i]->line);  //依次显示之前输入过得历史命令
-			i++;
+	if(args[1]==NULL){
+		if(h) {
+			int i = 0;
+			while(h[i]) {
+				printf("%d: %s\n", i, h[i]->line);  //依次显示之前输入过得历史命令
+				i++;
+			}
 		}
+		return 1;
 	}
+	else{
+		int i;
+		sum=int(*args[1])-48;
+		//printf("%d \n",sum);
+		while(h[i]) i++;
+		i--;
+		if(i>=sum){
+			while(sum--){
+				printf("%d: %s\n", i, h[i]->line);
+				i--;
+			}
+		}
+		else{
+			while(h[i]){
+				printf("%d: %s\n", i, h[i]->line);
+				i--;
+			}
+		}
+
+	}
+	
 	return 1; //返回调用
 }
 
